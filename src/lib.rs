@@ -8,39 +8,30 @@ use std::sync::mpsc::*;
 use std::sync::*;
 //use std::string::String;
 
-
-//static mut data: Arc<Mutex<String>> = Arc::new(Mutex::new(String::from("")));
+//#![feature(const_fn)]
+static mut DATA: Option<Arc<Mutex<String>>> = None;//Arc::new(Mutex::new(String::from("")));
 //static mut data: Arc<Mutex<String>> = initData();
 //static mut (tx: Sender!<i32>, rx: Receiver!<i32>) = channel!();
-static mut channelAB: (Option<Sender<String>>, Option<Receiver<String>>) = (None, None);//initChannel();
+static mut CHANNEL_AB: (Option<Sender<String>>, Option<Receiver<String>>) = (None, None);//initChannel();
 //static mut commandArray: Vec<String> = vec![String::new()];
-static mut threadInitialized: bool = false;
-//fn init() {
-//    static mut RESULT_SENDER: Option<Sender> = None;
-//    static mut RESULT_RECEIVER: Option<Receiver> = None;
+static mut INITIALIZED: bool = false;
 
-//    unsafe {
-//        let (tx, rx) = channel();
-//        RESULT_SENDER = tx;//Some(Mutex::new(tx));
-//        let tx = RESULT_SENDER.as_ref().unwrap().lock().unwrap().clone();
-
-//        RESULT_RECEIVER = rx;//Some(Mutex::new(rx));
-//        let rx = RESULT_RECEIVER.as_ref().unwrap().lock().unwrap().clone();
-//    }
-//}
-//let (dataThread, tx) = (data.clone(), tx.clone());
-//let mainThreadClone = data.clone();
-
-//const fn initData() -> Arc<Mutex<String>> {
-//    return Arc::new(Mutex::new(String::from("")));
-//}
 
 //#![feature(const_fn)]
 fn initChannel() {
     let (tx, rx) = channel();
     unsafe {
-        channelAB.0 = Some(tx);
-        channelAB.1 = Some(rx);
+        CHANNEL_AB.0 = Some(tx);
+//        CHANNEL_AB.0 = Some(Mutex::new(tx));
+//        CHANNEL_AB.1 = Some(Mutex::new(rx));
+        CHANNEL_AB.1 = Some(rx);
+    }
+}
+
+fn initData() {
+    let dt = Arc::new(Mutex::new(String::from("")));
+    unsafe {
+        DATA = Some(dt);
     }
 }
 
@@ -53,13 +44,21 @@ pub extern fn do_command(
 ) {
     println!("main>>>>!");
     initChannel();
+    initData();
 
     unsafe {
-        println!("thread threadInitialized={}", threadInitialized);
-        if threadInitialized == true {
-            let tx = channelAB.0.as_ref().unwrap().clone();
-            tx.send(command.to_string());
+        println!("thread threadInitialized={}", INITIALIZED);
+        if INITIALIZED == true {
+            println!("thread threadInitialized=true 1111");
+            let tx = CHANNEL_AB.0.as_ref().unwrap();//.clone();
+            println!("thread threadInitialized=true 2222:{}", command.to_string());
+            let dataR = DATA.unwrap();
+            let mut dataUn = dataR.lock().unwrap();//.clone();
+            *dataUn = command.to_string();
 
+            println!("thread threadInitialized=true 4444:{}", dataUn);
+            tx.send(command.to_string());
+            println!("thread threadInitialized=true 33333");
             return;
         }
     }
@@ -69,30 +68,30 @@ pub extern fn do_command(
     let handle = thread::spawn(move || {
         println!("thread:spawning");
         unsafe {
-            threadInitialized = true;
+            INITIALIZED = true;
         }
+
+//        let rx: &Receiver<String> = CHANNEL_AB.1.as_ref().unwrap();//.clone();
 
         loop {
             println!("thread: get rx");
-            let mut rx: &Receiver<String>;
-            unsafe {
-                rx = channelAB.1.as_ref().unwrap();
-            }
+
             println!("thread: rx receive...");
-            let commandWrap = rx.recv();
+            let mut commandLine: String;
+            unsafe {
+//                let command2 =
+                    CHANNEL_AB.1.as_ref().unwrap().recv();//.unwrap();
+                commandLine = DATA.unwrap().lock().unwrap().to_string();
+            }
 
-            println!("thread: rx received: {}", commandWrap);
-            let command = commandWrap.unwrap();
-
-            println!("thread. read dataUn={}", command);
-
-            if (command.len() == 0) {
+            if (commandLine.len() == 0) {
+                println!("thread. read dataUn={}", commandLine);
                 continue;
             }
 
-            println!("read a command line={}", command);
+            println!("read a command line={}", commandLine);
 
-            if command == "exit".to_string() {
+            if commandLine == "exit".to_string() {
                 break;
             }
 
